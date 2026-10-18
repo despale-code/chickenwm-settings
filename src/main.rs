@@ -897,6 +897,7 @@ fn main() -> Result<()> {
         // which eframe would then prefer, and wgpu draws transparent windows black on Windows.
         renderer: eframe::Renderer::Glow,
         viewport: egui::ViewportBuilder::default()
+            .with_icon(egui::IconData { rgba: include_bytes!("../assets/icon-64.rgba").to_vec(), width: 64, height: 64 })
             .with_title("Settings")
             .with_inner_size([960.0, 680.0])
             .with_min_inner_size([720.0, 480.0]),
