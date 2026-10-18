@@ -114,15 +114,70 @@ impl SettingsApp {
                 "Engine",
                 "Standard is safe with anti-cheat games. The DWM hook injects into Windows' compositor (experimental).",
                 |ui| {
-                    mode_changed = kit::segmented(
-                        ui,
-                        kit,
-                        &mut self.cfg.misc.dwm_hook_enabled,
-                        &[(false, "Standard"), (true, "DWM hook")],
-                    );
+                    let mut wanted = self.cfg.misc.dwm_hook_enabled;
+                    if kit::segmented(ui, kit, &mut wanted, &[(false, "Standard"), (true, "DWM hook")]) {
+                        if wanted {
+                            // Only after the anti-cheat warning below is confirmed.
+                            self.dwm_hook_confirm = true;
+                        } else {
+                            self.cfg.misc.dwm_hook_enabled = false;
+                            mode_changed = true;
+                        }
+                    }
                 },
             );
+            if self.cfg.misc.dwm_hook_enabled {
+                g.custom(|ui| {
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(
+                                "\u{26a0} The DWM hook is on. Games with anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard, FACEIT, ...) may refuse to start or flag your account while it is. Switch back to Standard before playing online.",
+                            )
+                            .size(12.0)
+                            .color(kit.danger),
+                        )
+                        .wrap(),
+                    );
+                });
+            }
         });
+        if self.dwm_hook_confirm {
+            let ctx = ui.ctx().clone();
+            let mut answer = None;
+            egui::Modal::new(egui::Id::new("dwm-hook-confirm")).show(&ctx, |ui| {
+                ui.set_width(420.0);
+                ui.label(egui::RichText::new("\u{26a0} Turn on the DWM hook?").size(16.0).color(kit.danger));
+                ui.add_space(6.0);
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(
+                            "The DWM hook injects code into dwm.exe, the Windows compositor. Anti-cheat software (Easy Anti-Cheat, BattlEye, Riot Vanguard, FACEIT and others) can treat that as tampering: games may refuse to start, and an account could be flagged or banned.\n\nIt is experimental and can also make the desktop unstable; if DWM crashes, the screen goes black for a moment while Windows restarts it.\n\nKeep it off if you play online games. You can switch back to Standard here at any time, or press Ctrl + Alt + Shift + Esc for the emergency restore.",
+                        )
+                        .size(12.0)
+                        .color(kit.sub),
+                    )
+                    .wrap(),
+                );
+                ui.add_space(12.0);
+                ui.horizontal(|ui| {
+                    if kit::button(ui, kit, "Keep Standard", true).clicked() {
+                        answer = Some(false);
+                    }
+                    if kit::button(ui, kit, "Enable anyway", false).clicked() {
+                        answer = Some(true);
+                    }
+                });
+            });
+            match answer {
+                Some(true) => {
+                    self.dwm_hook_confirm = false;
+                    self.cfg.misc.dwm_hook_enabled = true;
+                    mode_changed = true;
+                }
+                Some(false) => self.dwm_hook_confirm = false,
+                None => {}
+            }
+        }
         if mode_changed {
             self.doc.set_category_key(
                 "misc",
