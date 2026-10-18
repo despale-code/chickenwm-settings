@@ -109,13 +109,30 @@ impl SettingsApp {
         }
 
         let mut mode_changed = false;
+        // The hook is an optional part of the install; without its files it can't be turned on.
+        let hook_installed = std::env::current_exe()
+            .map(|exe| {
+                exe.with_file_name("chickenwm-dwm-hook.exe").exists()
+                    && exe.with_file_name("chickenwm_dwm_hook.dll").exists()
+            })
+            .unwrap_or(false);
         kit::group(ui, kit, "Compositor", |g| {
             g.row(
                 "Engine",
                 "Standard is safe with anti-cheat games. The DWM hook injects into Windows' compositor (experimental).",
                 |ui| {
                     let mut wanted = self.cfg.misc.dwm_hook_enabled;
-                    if kit::segmented(ui, kit, &mut wanted, &[(false, "Standard"), (true, "DWM hook")]) {
+                    // Not installed: only "Standard" can be picked (still allowed if the config
+                    // has the hook on, so it can be switched off).
+                    let can_switch = hook_installed || self.cfg.misc.dwm_hook_enabled;
+                    let changed = ui
+                        .add_enabled_ui(can_switch, |ui| {
+                            kit::segmented(ui, kit, &mut wanted, &[(false, "Standard"), (true, "DWM hook")])
+                        })
+                        .inner;
+                    if changed && wanted && !hook_installed {
+                        // Can't turn on what isn't installed.
+                    } else if changed {
                         if wanted {
                             // Only after the anti-cheat warning below is confirmed.
                             self.dwm_hook_confirm = true;
@@ -126,6 +143,16 @@ impl SettingsApp {
                     }
                 },
             );
+            if !hook_installed {
+                g.custom(|ui| {
+                    let text = if self.cfg.misc.dwm_hook_enabled {
+                        "The DWM hook is on in your config but isn't installed, so it can't be used. Switch to Standard to clear it, or run the installer again and tick it."
+                    } else {
+                        "The DWM hook isn't installed. It is an optional part of the installer (off by default because it can trip game anti-cheat); run the installer again and tick it to add it."
+                    };
+                    ui.add(egui::Label::new(egui::RichText::new(text).size(12.0).color(kit.sub)).wrap());
+                });
+            }
             if self.cfg.misc.dwm_hook_enabled {
                 g.custom(|ui| {
                     ui.add(
