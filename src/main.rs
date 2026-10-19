@@ -16,6 +16,7 @@
 mod kit;
 mod pages;
 mod theme_ui;
+mod updates;
 
 use anyhow::Result;
 use chickenwm_core::bootstrap_config_and_themes;
@@ -223,6 +224,7 @@ pub(crate) struct SettingsApp {
     pub wallpaper_transition: &'static str,
 
     pub files_handler_active: bool,
+    pub updates: updates::Updates,
 
     pub theme_editor: theme_ui::ThemeEditor,
     pub visuals_from: Option<CssStyleSheet>,
@@ -347,6 +349,7 @@ impl SettingsApp {
             wallpaper_path_input: wp.map(|w| w.path.clone()).unwrap_or_default(),
             wallpaper_transition,
             files_handler_active: is_files_handler_registered(),
+            updates: updates::Updates::default(),
             theme_editor: theme_ui::ThemeEditor::new(&cfg.theme),
             visuals_from: None,
             auto_dark: cfg.theme.auto_dark.clone(),

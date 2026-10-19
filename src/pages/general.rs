@@ -207,6 +207,57 @@ impl SettingsApp {
             self.sync_config_and_notify_labeled("Add startup app");
         }
 
+        let mut check_updates = false;
+        let mut update_now = false;
+        let update_state = self.updates.state();
+        kit::group(ui, kit, "Updates", |g| {
+            g.row(
+                "ChickenWM updates",
+                "Compares each installed program with its repository, then rebuilds the ones that changed. Updating closes ChickenWM for a moment.",
+                |ui| {
+                    let checking = matches!(update_state, crate::updates::CheckState::Checking);
+                    if kit::button(ui, kit, "Check for updates", false).clicked() && !checking {
+                        check_updates = true;
+                    }
+                },
+            );
+            g.row("Status", "", |ui| match &update_state {
+                crate::updates::CheckState::Idle => {
+                    kit::chip(ui, kit, "Not checked yet", kit.sub);
+                }
+                crate::updates::CheckState::Checking => {
+                    kit::chip(ui, kit, "Checking…", kit.sub);
+                }
+                crate::updates::CheckState::Done(list) if list.is_empty() => {
+                    kit::chip(ui, kit, "● Up to date", Color32::from_rgb(52, 199, 89));
+                }
+                crate::updates::CheckState::Done(list) => {
+                    if kit::button(ui, kit, "Update now", true).clicked() {
+                        update_now = true;
+                    }
+                    let text = if list.len() <= 3 {
+                        let names: Vec<&str> = list.iter().map(|(repo, _)| repo.as_str()).collect();
+                        format!("Updates: {}", names.join(", "))
+                    } else {
+                        format!("{} programs have updates", list.len())
+                    };
+                    kit::chip(ui, kit, &text, kit.sub);
+                }
+                crate::updates::CheckState::Failed(e) => {
+                    kit::chip(ui, kit, e, Color32::from_rgb(220, 80, 70));
+                }
+            });
+        });
+        if check_updates {
+            self.updates.check(ui.ctx());
+        }
+        if update_now {
+            self.status_banner = match crate::updates::Updates::update_now() {
+                Ok(()) => "The updater is running in its own window".to_string(),
+                Err(e) => e,
+            };
+        }
+
         let mut restore = false;
         kit::group(ui, kit, "Recovery", |g| {
             g.row(
