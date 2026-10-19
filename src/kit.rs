@@ -48,7 +48,6 @@ pub fn row_keys_for_label(label: &str) -> &'static [(&'static str, &'static str)
         "Backdrop blur" => &[("decoration", "blur_enabled")],
         "Match the display" | "Frame rate limit" => &[("misc", "fps_limit")],
         "Save power when idle" => &[("misc", "vfr")],
-        "Engine" => &[("misc", "dwm_hook_enabled"), ("misc", "compositor_hook")],
         "Layout" => &[("general", "layout")],
         "Gaps between windows" => &[("general", "gaps_in")],
         "Gaps at screen edges" => &[("general", "gaps_out")],

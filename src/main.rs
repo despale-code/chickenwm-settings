@@ -99,7 +99,7 @@ pub(crate) const PAGES: [PageInfo; 10] = [
         tile: Color32::from_rgb(0, 122, 255),
         title: "Displays",
         subtitle: "Monitors, frame rate and the compositor.",
-        keywords: "monitor refresh hz fps framerate vfr compositor dwm anti-cheat",
+        keywords: "monitor refresh hz fps framerate vfr",
     },
     PageInfo {
         page: Page::Tiling,
@@ -187,8 +187,6 @@ pub(crate) struct SettingsApp {
     pub current_fonts: Option<(Instant, Vec<String>)>,
     pub font_filter: String,
     pub font_confirm: Option<FontRequest>,
-    /// "DWM hook" was picked: the anti-cheat warning shows until confirmed or cancelled.
-    pub dwm_hook_confirm: bool,
     pub font_job: Option<Arc<std::sync::Mutex<FontJob>>>,
     pub status_banner: String,
     pub status_seen: String,
@@ -317,7 +315,6 @@ impl SettingsApp {
             current_fonts: None,
             font_filter: String::new(),
             font_confirm: None,
-            dwm_hook_confirm: false,
             font_job: None,
             status_banner: String::new(),
             status_seen: String::new(),
