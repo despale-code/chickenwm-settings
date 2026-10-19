@@ -195,6 +195,8 @@ pub(crate) struct SettingsApp {
     pub new_exec_once: String,
 
     pub show_css_editor: bool,
+    /// roobar.css `--float` (floating bar with margins, or docked to top edge).
+    pub bar_float: bool,
     /// roobar.css `--islands` (each widget its own pill, or one background for the whole bar).
     pub bar_islands: bool,
     pub selected_css_file: String,
@@ -321,6 +323,10 @@ impl SettingsApp {
             status_at: None,
             new_exec_once: String::new(),
             show_css_editor: false,
+            bar_float: load_css_sheet("roobar.css")
+                .ok()
+                .and_then(|s| s.custom_properties.get("--float").cloned())
+                .is_none_or(|v| !matches!(v.trim().to_ascii_lowercase().as_str(), "false" | "no" | "off" | "0" | "none")),
             bar_islands: load_css_sheet("roobar.css")
                 .ok()
                 .and_then(|s| s.custom_properties.get("--islands").cloned())

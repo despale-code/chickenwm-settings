@@ -38,26 +38,52 @@ impl ThemeEditor {
 
         kit::group(ui, kit, "Theme", |g| {
             g.custom(|ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(12.0, 12.0);
-                    let mode = self.draft.mode;
-                    let generated = Palette::new(self.draft.accent, mode);
-                    if theme_tile(ui, kit, "ChickenWM", &generated, self.draft.preset.is_empty()) {
-                        self.draft.preset.clear();
-                        apply = true;
-                    }
-                    for p in &PRESETS {
-                        let name = match mode {
-                            ThemeMode::Light => p.light_name,
-                            ThemeMode::Dark => p.dark_name,
-                        };
-                        let label = if name == p.name { p.name.to_string() } else { format!("{} · {name}", p.name) };
-                        if theme_tile(ui, kit, &label, &p.palette(mode), self.draft.preset == p.id) {
-                            self.draft.preset = p.id.to_string();
-                            apply = true;
-                        }
-                    }
-                });
+                egui::ScrollArea::vertical()
+                    .max_height(260.0)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        egui::Grid::new("theme_presets_grid")
+                            .num_columns(3)
+                            .spacing(Vec2::new(14.0, 14.0))
+                            .show(ui, |ui| {
+                                let mode = self.draft.mode;
+                                let mut col = 0;
+                                let mut chosen = None;
+
+                                let generated = Palette::new(self.draft.accent, mode);
+                                if theme_tile(ui, kit, "ChickenWM", &generated, self.draft.preset.is_empty()) {
+                                    chosen = Some(String::new());
+                                }
+                                col += 1;
+                                if col % 3 == 0 {
+                                    ui.end_row();
+                                }
+
+                                for p in &PRESETS {
+                                    let name = match mode {
+                                        ThemeMode::Light => p.light_name,
+                                        ThemeMode::Dark => p.dark_name,
+                                    };
+                                    let label = if name == p.name { p.name.to_string() } else { format!("{} · {name}", p.name) };
+                                    if theme_tile(ui, kit, &label, &p.palette(mode), self.draft.preset == p.id) {
+                                        chosen = Some(p.id.to_string());
+                                    }
+                                    col += 1;
+                                    if col % 3 == 0 {
+                                        ui.end_row();
+                                    }
+                                }
+
+                                if col % 3 != 0 {
+                                    ui.end_row();
+                                }
+
+                                if let Some(p) = chosen {
+                                    self.draft.preset = p;
+                                    apply = true;
+                                }
+                            });
+                    });
             });
             g.row("Appearance", "Light or dark for every app that follows the system.", |ui| {
                 if kit::segmented(ui, kit, &mut self.draft.mode, &[(ThemeMode::Light, "☀ Light"), (ThemeMode::Dark, "🌙 Dark")]) {

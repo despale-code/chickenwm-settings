@@ -324,21 +324,41 @@ impl SettingsApp {
             self.sync_config_and_notify_labeled("Window appearance");
         }
 
-        let mut islands_changed = false;
+        let mut bar_config_changed = false;
         kit::group(ui, kit, "Bar", |g| {
             g.row(
-                "Island separation",
-                "Each group of widgets in its own pill. Off: one background and border for the whole bar, same layout.",
+                "Floating bar",
+                "Floating bar with margins and rounded corners. Off: docked to monitor edge, full width, 0px gap and corners, islands disabled.",
                 |ui| {
-                    islands_changed = kit::toggle(ui, kit, &mut self.bar_islands).clicked();
+                    if kit::toggle(ui, kit, &mut self.bar_float).clicked() {
+                        bar_config_changed = true;
+                        if !self.bar_float {
+                            self.bar_islands = false;
+                        }
+                    }
                 },
             );
+            if self.bar_float {
+                g.row(
+                    "Island separation",
+                    "Each group of widgets in its own pill. Off: one background and border for the whole bar, same layout.",
+                    |ui| {
+                        if kit::toggle(ui, kit, &mut self.bar_islands).clicked() {
+                            bar_config_changed = true;
+                        }
+                    },
+                );
+            }
         });
-        if islands_changed {
+        if bar_config_changed {
             let path = config_dir().join("roobar.css");
             let source = std::fs::read_to_string(&path).unwrap_or_default();
-            let value = if self.bar_islands { "true" } else { "false" };
-            let updated = chickenwm_core::theme::set_root_vars(&source, &[("--islands", value.to_owned())]);
+            let float_val = if self.bar_float { "true" } else { "false" };
+            let islands_val = if self.bar_islands { "true" } else { "false" };
+            let updated = chickenwm_core::theme::set_root_vars(&source, &[
+                ("--float", float_val.to_owned()),
+                ("--islands", islands_val.to_owned()),
+            ]);
             if let Err(e) = std::fs::write(&path, updated) {
                 tracing::warn!("settings: couldn't write roobar.css: {e}");
             }
