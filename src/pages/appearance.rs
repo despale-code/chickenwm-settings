@@ -2,7 +2,7 @@ use crate::kit::{self, Kit};
 use crate::{bool_str, theme_ui, SettingsApp};
 use chickenwm_core::config::{config_dir, RgbaColor};
 use chickenwm_core::ipc::{send_ipc_command_blocking, IpcCommand, PIPE_NAME_DAEMON};
-use eframe::egui::{self, Color32};
+use eframe::egui::{self, Color32, RichText};
 
 impl SettingsApp {
     pub(crate) fn theme_tools_ui(&mut self, ui: &mut egui::Ui, kit: &Kit) {
@@ -50,6 +50,75 @@ impl SettingsApp {
                 }
             }
             if self.auto_dark.mode == "sun" {
+                // If coordinates or timezone not set, auto-detect local system timezone:
+                if self.auto_dark.latitude.is_none() || self.auto_dark.longitude.is_none() {
+                    if let Some(sys_tz) = chickenwm_core::timezones::local_system_timezone() {
+                        self.auto_dark.latitude = Some(sys_tz.lat);
+                        self.auto_dark.longitude = Some(sys_tz.lon);
+                        self.auto_dark.timezone = Some(sys_tz.id.to_string());
+                        auto_changed = true;
+                    }
+                }
+
+                let current_tz = self.auto_dark.timezone.as_deref()
+                    .and_then(chickenwm_core::timezones::find_timezone_by_id)
+                    .or_else(|| {
+                        match (self.auto_dark.latitude, self.auto_dark.longitude) {
+                            (Some(lat), Some(lon)) => chickenwm_core::timezones::find_timezone_by_coords(lat, lon),
+                            _ => None,
+                        }
+                    });
+
+                let current_display = current_tz.map(|tz| tz.display).unwrap_or("Select a time zone…");
+
+                g.row("Time zone", "Select your city or region for exact local sunrise and sunset.", |ui| {
+                    let mut picked_tz = None;
+                    egui::ComboBox::from_id_salt("auto_dark_timezone")
+                        .selected_text(current_display)
+                        .width(280.0)
+                        .show_ui(ui, |ui| {
+                            ui.set_min_width(320.0);
+                            ui.horizontal(|ui| {
+                                ui.label("🔍");
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.tz_search)
+                                        .hint_text("Search city, timezone, UTC offset…")
+                                        .desired_width(ui.available_width() - 24.0),
+                                );
+                                if !self.tz_search.is_empty() && ui.small_button("✕").clicked() {
+                                    self.tz_search.clear();
+                                }
+                            });
+                            ui.separator();
+
+                            let filtered = chickenwm_core::timezones::search_timezones(&self.tz_search);
+                            if filtered.is_empty() {
+                                ui.add_space(4.0);
+                                ui.label(RichText::new("No matching time zones found").size(12.0).color(kit.sub));
+                                ui.add_space(4.0);
+                            } else {
+                                egui::ScrollArea::vertical()
+                                    .max_height(280.0)
+                                    .auto_shrink([false, false])
+                                    .show(ui, |ui| {
+                                        for tz in filtered {
+                                            let is_selected = current_tz.map_or(false, |c| c.id == tz.id);
+                                            if ui.selectable_label(is_selected, tz.display).clicked() {
+                                                picked_tz = Some(tz);
+                                            }
+                                        }
+                                    });
+                            }
+                        });
+
+                    if let Some(tz) = picked_tz {
+                        self.auto_dark.timezone = Some(tz.id.to_string());
+                        self.auto_dark.latitude = Some(tz.lat);
+                        self.auto_dark.longitude = Some(tz.lon);
+                        auto_changed = true;
+                    }
+                });
+
                 let mut loc = match (self.auto_dark.latitude, self.auto_dark.longitude) {
                     (Some(a), Some(b)) => format!("{a:.4}, {b:.4}"),
                     _ => String::new(),
@@ -64,19 +133,22 @@ impl SettingsApp {
                         ),
                         None => "No sunrise or sunset there today.".to_string(),
                     },
-                    _ => "Latitude, longitude — e.g. 41.01, 28.97 for Istanbul.".to_string(),
+                    _ => "Latitude, longitude — set automatically by time zone or custom.".to_string(),
                 };
-                g.row("Location", &hint, |ui| {
+                g.row("Coordinates", &hint, |ui| {
                     let r = ui.add(
                         egui::TextEdit::singleline(&mut loc)
-                            .desired_width(150.0)
-                            .hint_text("41.01, 28.97"),
+                            .desired_width(140.0)
+                            .hint_text("41.01, 28.98"),
                     );
                     if r.lost_focus() {
                         let mut it = loc.split(',').map(|s| s.trim().parse::<f64>());
                         if let (Some(Ok(lat)), Some(Ok(lon))) = (it.next(), it.next()) {
                             self.auto_dark.latitude = Some(lat);
                             self.auto_dark.longitude = Some(lon);
+                            if let Some(closest) = chickenwm_core::timezones::find_timezone_by_coords(lat, lon) {
+                                self.auto_dark.timezone = Some(closest.id.to_string());
+                            }
                             auto_changed = true;
                         }
                     }

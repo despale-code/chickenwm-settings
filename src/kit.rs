@@ -63,7 +63,8 @@ pub fn row_keys_for_label(label: &str) -> &'static [(&'static str, &'static str)
         "Switch automatically" => &[("theme:auto_dark", "mode")],
         "Light from" => &[("theme:auto_dark", "light_at")],
         "Dark from" => &[("theme:auto_dark", "dark_at")],
-        "Location" => &[("theme:auto_dark", "location")],
+        "Time zone" => &[("theme:auto_dark", "timezone")],
+        "Coordinates" | "Location" => &[("theme:auto_dark", "location")],
         _ => &[],
     }
 }
