@@ -897,6 +897,76 @@ impl eframe::App for SettingsApp {
                     });
             });
         self.status_toast(ctx, &kit, central.response.rect);
+
+        let screen = ctx.screen_rect();
+        let is_max = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+        chickenwm_core::window_frame::handle_window_edge_resize(ctx, screen, is_max);
+
+        // Top right window controls (Minimize, Maximize, Close)
+        egui::Area::new(egui::Id::new("settings_win_controls"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(egui::pos2(screen.right() - 88.0, screen.top() + 8.0))
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+
+                    // Minimize
+                    let (min_r, min_resp) = ui.allocate_exact_size(egui::vec2(24.0, 22.0), egui::Sense::click());
+                    if min_resp.hovered() {
+                        ui.painter().rect_filled(min_r, egui::CornerRadius::same(4), kit.fg.gamma_multiply(0.08));
+                    }
+                    let min_c = min_r.center();
+                    let min_col = if min_resp.hovered() { kit.fg } else { kit.sub };
+                    ui.painter().line_segment([min_c + egui::vec2(-4.5, 0.0), min_c + egui::vec2(4.5, 0.0)], egui::Stroke::new(1.4_f32, min_col));
+                    if min_resp.clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                    }
+
+                    // Maximize / Restore
+                    let (max_r, max_resp) = ui.allocate_exact_size(egui::vec2(24.0, 22.0), egui::Sense::click());
+                    if max_resp.hovered() {
+                        ui.painter().rect_filled(max_r, egui::CornerRadius::same(4), kit.fg.gamma_multiply(0.08));
+                    }
+                    let mc = max_r.center();
+                    let max_col = if max_resp.hovered() { kit.fg } else { kit.sub };
+                    ui.painter().rect_stroke(egui::Rect::from_center_size(mc, egui::Vec2::splat(9.0)), egui::CornerRadius::same(2), egui::Stroke::new(1.2_f32, max_col), egui::StrokeKind::Inside);
+                    if max_resp.clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!is_max));
+                    }
+
+                    // Close
+                    let (close_r, close_resp) = ui.allocate_exact_size(egui::vec2(24.0, 22.0), egui::Sense::click());
+                    if close_resp.hovered() {
+                        ui.painter().rect_filled(close_r, egui::CornerRadius::same(4), egui::Color32::from_rgb(225, 60, 60));
+                    }
+                    let cc = close_r.center();
+                    let close_col = if close_resp.hovered() { egui::Color32::WHITE } else { kit.sub };
+                    ui.painter().line_segment([cc + egui::vec2(-4.5, -4.5), cc + egui::vec2(4.5, 4.5)], egui::Stroke::new(1.4_f32, close_col));
+                    ui.painter().line_segment([cc + egui::vec2(4.5, -4.5), cc + egui::vec2(-4.5, 4.5)], egui::Stroke::new(1.4_f32, close_col));
+                    if close_resp.clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                });
+            });
+
+        // Top drag bar for moving the window
+        egui::Area::new(egui::Id::new("settings_drag_area"))
+            .order(egui::Order::Background)
+            .fixed_pos(egui::pos2(screen.left(), screen.top()))
+            .show(ctx, |ui| {
+                let drag_rect = egui::Rect::from_min_max(egui::pos2(screen.left(), screen.top()), egui::pos2(screen.right() - 92.0, screen.top() + 32.0));
+                let drag_resp = ui.interact(drag_rect, egui::Id::new("settings_top_drag"), egui::Sense::drag());
+                if drag_resp.drag_started() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                }
+                if drag_resp.double_clicked() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!is_max));
+                }
+            });
+
+        // Paint uniform 1-pixel gradient border
+        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("settings_window_border")));
+        chickenwm_core::window_frame::paint_window_gradient_border(&painter, screen, 12.0_f32);
     }
 }
 
@@ -931,6 +1001,8 @@ fn main() -> Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_icon(egui::IconData { rgba: include_bytes!("../assets/icon-64.rgba").to_vec(), width: 64, height: 64 })
             .with_title("Settings")
+            .with_decorations(false)
+            .with_transparent(true)
             .with_inner_size([960.0, 680.0])
             .with_min_inner_size([720.0, 480.0]),
         ..Default::default()
@@ -939,7 +1011,26 @@ fn main() -> Result<()> {
     eframe::run_native(
         "ChickenWM Settings",
         native_options,
-        Box::new(move |_cc| Ok(Box::new(SettingsApp::new(doc, cfg, css)))),
+        Box::new(move |cc| {
+            use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            if let Ok(handle) = cc.window_handle() {
+                if let RawWindowHandle::Win32(win32) = handle.as_raw() {
+                    let hwnd = windows::Win32::Foundation::HWND(win32.hwnd.get() as *mut _);
+                    chickenwm_core::sys::apply_acrylic(hwnd, None);
+                    let corner = windows::Win32::Graphics::Dwm::DWMWCP_ROUND;
+                    let _ = unsafe {
+                        windows::Win32::Graphics::Dwm::DwmSetWindowAttribute(
+                            hwnd,
+                            windows::Win32::Graphics::Dwm::DWMWA_WINDOW_CORNER_PREFERENCE,
+                            &corner as *const _ as *const _,
+                            std::mem::size_of_val(&corner) as u32,
+                        )
+                    };
+                    chickenwm_core::sys::enable_borderless_resizing(hwnd);
+                }
+            }
+            Ok(Box::new(SettingsApp::new(doc, cfg, css)))
+        }),
     )
     .map_err(|e| anyhow::anyhow!("eframe error: {e}"))?;
     Ok(())
