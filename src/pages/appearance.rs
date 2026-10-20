@@ -2,7 +2,7 @@ use crate::kit::{self, Kit};
 use crate::{bool_str, theme_ui, SettingsApp};
 use chickenwm_core::config::{config_dir, RgbaColor};
 use chickenwm_core::ipc::{send_ipc_command_blocking, IpcCommand, PIPE_NAME_DAEMON};
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, Color32, CornerRadius, FontId, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 
 impl SettingsApp {
     pub(crate) fn theme_tools_ui(&mut self, ui: &mut egui::Ui, kit: &Kit) {
@@ -69,60 +69,6 @@ impl SettingsApp {
                         }
                     });
 
-                let current_display = current_tz.map(|tz| tz.display).unwrap_or("Select a time zone…");
-
-                g.row("Time zone", "Select your city or region for exact local sunrise and sunset.", |ui| {
-                    let mut picked_tz = None;
-                    egui::ComboBox::from_id_salt("auto_dark_timezone")
-                        .selected_text(current_display)
-                        .width(280.0)
-                        .show_ui(ui, |ui| {
-                            ui.set_min_width(320.0);
-                            ui.horizontal(|ui| {
-                                ui.label("🔍");
-                                ui.add(
-                                    egui::TextEdit::singleline(&mut self.tz_search)
-                                        .hint_text("Search city, timezone, UTC offset…")
-                                        .desired_width(ui.available_width() - 24.0),
-                                );
-                                if !self.tz_search.is_empty() && ui.small_button("✕").clicked() {
-                                    self.tz_search.clear();
-                                }
-                            });
-                            ui.separator();
-
-                            let filtered = chickenwm_core::timezones::search_timezones(&self.tz_search);
-                            if filtered.is_empty() {
-                                ui.add_space(4.0);
-                                ui.label(RichText::new("No matching time zones found").size(12.0).color(kit.sub));
-                                ui.add_space(4.0);
-                            } else {
-                                egui::ScrollArea::vertical()
-                                    .max_height(280.0)
-                                    .auto_shrink([false, false])
-                                    .show(ui, |ui| {
-                                        for tz in filtered {
-                                            let is_selected = current_tz.map_or(false, |c| c.id == tz.id);
-                                            if ui.selectable_label(is_selected, tz.display).clicked() {
-                                                picked_tz = Some(tz);
-                                            }
-                                        }
-                                    });
-                            }
-                        });
-
-                    if let Some(tz) = picked_tz {
-                        self.auto_dark.timezone = Some(tz.id.to_string());
-                        self.auto_dark.latitude = Some(tz.lat);
-                        self.auto_dark.longitude = Some(tz.lon);
-                        auto_changed = true;
-                    }
-                });
-
-                let mut loc = match (self.auto_dark.latitude, self.auto_dark.longitude) {
-                    (Some(a), Some(b)) => format!("{a:.4}, {b:.4}"),
-                    _ => String::new(),
-                };
                 let (y, m, d, _, off) = theme_tools::local_clock();
                 let hint = match (self.auto_dark.latitude, self.auto_dark.longitude) {
                     (Some(lat), Some(lon)) => match theme_tools::sun_times(lat, lon, y, m, d, off) {
@@ -133,23 +79,180 @@ impl SettingsApp {
                         ),
                         None => "No sunrise or sunset there today.".to_string(),
                     },
-                    _ => "Latitude, longitude — set automatically by time zone or custom.".to_string(),
+                    _ => "Select your time zone to calculate sunrise and sunset.".to_string(),
                 };
-                g.row("Coordinates", &hint, |ui| {
-                    let r = ui.add(
-                        egui::TextEdit::singleline(&mut loc)
-                            .desired_width(140.0)
-                            .hint_text("41.01, 28.98"),
+
+                let current_display = current_tz.map(|tz| tz.display).unwrap_or("Select time zone…");
+
+                g.row("Time zone", &hint, |ui| {
+                    let btn_w = 175.0;
+                    let btn_h = 26.0;
+                    let (btn_rect, btn_resp) = ui.allocate_exact_size(Vec2::new(btn_w, btn_h), Sense::click());
+
+                    let is_hovered = btn_resp.hovered() || self.tz_dropdown_open;
+                    let bg_color = if self.tz_dropdown_open {
+                        kit.card.lerp_to_gamma(kit.fg, 0.12)
+                    } else if is_hovered {
+                        kit.fg.gamma_multiply(if kit.light { 0.08 } else { 0.12 })
+                    } else {
+                        kit.fg.gamma_multiply(if kit.light { 0.04 } else { 0.07 })
+                    };
+
+                    ui.painter().rect_filled(btn_rect, CornerRadius::same(7), bg_color);
+                    ui.painter().rect_stroke(
+                        btn_rect,
+                        CornerRadius::same(7),
+                        Stroke::new(1.0_f32, if is_hovered { kit.accent.gamma_multiply(0.6) } else { kit.border }),
+                        egui::StrokeKind::Inside,
                     );
-                    if r.lost_focus() {
-                        let mut it = loc.split(',').map(|s| s.trim().parse::<f64>());
-                        if let (Some(Ok(lat)), Some(Ok(lon))) = (it.next(), it.next()) {
-                            self.auto_dark.latitude = Some(lat);
-                            self.auto_dark.longitude = Some(lon);
-                            if let Some(closest) = chickenwm_core::timezones::find_timezone_by_coords(lat, lon) {
-                                self.auto_dark.timezone = Some(closest.id.to_string());
+
+                    // Truncate display string if needed to fit within button
+                    let text_area = Rect::from_min_max(
+                        btn_rect.min + Vec2::new(8.0, 0.0),
+                        btn_rect.max - Vec2::new(22.0, 0.0),
+                    );
+                    let font = FontId::proportional(12.0);
+                    let text_layout = ui.painter().layout(
+                        current_display.to_string(),
+                        font.clone(),
+                        kit.fg,
+                        text_area.width(),
+                    );
+                    ui.painter().with_clip_rect(text_area).galley(
+                        Pos2::new(text_area.left(), btn_rect.center().y - text_layout.size().y / 2.0),
+                        text_layout,
+                        Color32::WHITE,
+                    );
+
+                    // Chevron icon on right
+                    let chev_center = Pos2::new(btn_rect.right() - 11.0, btn_rect.center().y);
+                    let chev_col = if is_hovered { kit.accent } else { kit.sub };
+                    ui.painter().line_segment(
+                        [chev_center + Vec2::new(-3.5, -2.0), chev_center + Vec2::new(0.0, 2.0)],
+                        Stroke::new(1.5_f32, chev_col),
+                    );
+                    ui.painter().line_segment(
+                        [chev_center + Vec2::new(0.0, 2.0), chev_center + Vec2::new(3.5, -2.0)],
+                        Stroke::new(1.5_f32, chev_col),
+                    );
+
+                    if btn_resp.clicked() {
+                        self.tz_dropdown_open = !self.tz_dropdown_open;
+                    }
+
+                    if self.tz_dropdown_open {
+                        let popup_id = ui.id().with("tz_dropdown_popup_area");
+                        let popup_pos = btn_rect.left_bottom() + Vec2::new(0.0, 4.0);
+                        let popup_width = 195.0;
+                        let popup_max_h = 140.0;
+
+                        let mut picked_tz = None;
+                        let mut close_dropdown = false;
+
+                        let area_resp = egui::Area::new(popup_id)
+                            .order(egui::Order::Foreground)
+                            .fixed_pos(popup_pos)
+                            .constrain(true)
+                            .show(ui.ctx(), |ui| {
+                                egui::Frame::NONE
+                                    .fill(kit.card)
+                                    .stroke(Stroke::new(1.0_f32, kit.border))
+                                    .corner_radius(CornerRadius::same(8))
+                                    .shadow(egui::epaint::Shadow {
+                                        offset: [0, 6],
+                                        blur: 16,
+                                        spread: 0,
+                                        color: Color32::from_black_alpha(100),
+                                    })
+                                    .inner_margin(egui::Margin::symmetric(6, 6))
+                                    .show(ui, |ui| {
+                                        ui.set_width(popup_width - 12.0);
+
+                                        // Search box
+                                        ui.horizontal(|ui| {
+                                            ui.label(RichText::new("🔍").size(10.5).color(kit.sub));
+                                            let clear_w = if self.tz_search.is_empty() { 0.0 } else { 18.0 };
+                                            ui.add(
+                                                egui::TextEdit::singleline(&mut self.tz_search)
+                                                    .hint_text("Search…")
+                                                    .desired_width(ui.available_width() - clear_w),
+                                            );
+                                            if !self.tz_search.is_empty() && ui.small_button("✕").clicked() {
+                                                self.tz_search.clear();
+                                            }
+                                        });
+
+                                        ui.add_space(2.0);
+                                        ui.painter().hline(
+                                            ui.available_rect_before_wrap().x_range(),
+                                            ui.cursor().top(),
+                                            Stroke::new(1.0_f32, kit.hairline()),
+                                        );
+                                        ui.add_space(3.0);
+
+                                        let filtered = chickenwm_core::timezones::search_timezones(&self.tz_search);
+                                        if filtered.is_empty() {
+                                            ui.add_space(4.0);
+                                            ui.label(RichText::new("No time zones found").size(11.0).color(kit.sub));
+                                            ui.add_space(4.0);
+                                        } else {
+                                            egui::ScrollArea::vertical()
+                                                .max_height(popup_max_h)
+                                                .auto_shrink([false, false])
+                                                .show(ui, |ui| {
+                                                    for tz in filtered {
+                                                        let is_selected = current_tz.map_or(false, |c| c.id == tz.id);
+                                                        let (item_r, item_resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 20.0), Sense::click());
+                                                        if is_selected {
+                                                            ui.painter().rect_filled(item_r, CornerRadius::same(4), kit.accent.gamma_multiply(0.20));
+                                                        } else if item_resp.hovered() {
+                                                            ui.painter().rect_filled(item_r, CornerRadius::same(4), kit.fg.gamma_multiply(0.06));
+                                                        }
+
+                                                        let text_col = if is_selected { kit.accent } else { kit.fg };
+                                                        let text_clip = Rect::from_min_max(item_r.min + Vec2::new(4.0, 0.0), item_r.max - Vec2::new(4.0, 0.0));
+                                                        let layout = ui.painter().layout_no_wrap(tz.display.to_string(), FontId::proportional(11.0), text_col);
+                                                        ui.painter().with_clip_rect(text_clip).galley(
+                                                            Pos2::new(text_clip.left(), item_r.center().y - layout.size().y / 2.0),
+                                                            layout,
+                                                            Color32::WHITE,
+                                                        );
+
+                                                        if item_resp.clicked() {
+                                                            picked_tz = Some(tz);
+                                                        }
+                                                    }
+                                                });
+                                        }
+                                    })
+                            });
+
+                        let popup_rect = area_resp.response.rect;
+                        let pointer_pos = ui.input(|i| i.pointer.hover_pos());
+
+                        if let Some(pos) = pointer_pos {
+                            // Expand hit area slightly so moving mouse smoothly between button and popup doesn't close it
+                            let in_trigger = btn_rect.expand(4.0).contains(pos);
+                            let in_popup = popup_rect.expand(6.0).contains(pos);
+                            if !in_trigger && !in_popup {
+                                close_dropdown = true;
                             }
+                        }
+
+                        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                            close_dropdown = true;
+                        }
+
+                        if let Some(tz) = picked_tz {
+                            self.auto_dark.timezone = Some(tz.id.to_string());
+                            self.auto_dark.latitude = Some(tz.lat);
+                            self.auto_dark.longitude = Some(tz.lon);
                             auto_changed = true;
+                            close_dropdown = true;
+                        }
+
+                        if close_dropdown {
+                            self.tz_dropdown_open = false;
                         }
                     }
                 });
