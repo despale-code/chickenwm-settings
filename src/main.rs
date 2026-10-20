@@ -842,7 +842,7 @@ impl eframe::App for SettingsApp {
             .exact_width(236.0)
             .frame(
                 egui::Frame::NONE
-                    .fill(kit.sidebar)
+                    .fill(Color32::from_rgba_unmultiplied(kit.sidebar.r(), kit.sidebar.g(), kit.sidebar.b(), 26))
                     .inner_margin(egui::Margin::symmetric(10, 6)),
             )
             .show(ctx, |ui| {

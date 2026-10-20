@@ -416,7 +416,7 @@ pub fn keycap(ui: &mut egui::Ui, kit: &Kit, text: &str) {
 /// egui visuals for the whole window (fields, sliders, combo boxes, scroll bars).
 pub fn apply_visuals(ctx: &egui::Context, kit: &Kit) {
     let mut vis = if kit.light { egui::Visuals::light() } else { egui::Visuals::dark() };
-    vis.panel_fill = kit.bg;
+    vis.panel_fill = Color32::TRANSPARENT;
     vis.window_fill = kit.card;
     vis.extreme_bg_color = if kit.light { Color32::WHITE } else { kit.bg };
     vis.faint_bg_color = kit.sidebar;
