@@ -822,8 +822,6 @@ impl eframe::App for SettingsApp {
             )
             .show(ctx, |ui| {
                 self.sidebar(ui, &kit);
-                let rect = ui.max_rect();
-                ui.painter().vline(rect.right(), rect.y_range(), Stroke::new(1.0_f32, kit.border));
             });
 
         // Ctrl+Z (when no text field has the keyboard): undo the last saved change.
