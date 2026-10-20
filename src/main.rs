@@ -254,9 +254,30 @@ pub(crate) enum FontTarget {
     InstallOnly,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FontItem {
+    Nerd(chickenwm_core::fonts::NerdFont),
+    Apple(chickenwm_core::fonts::AppleFont),
+}
+
+impl FontItem {
+    pub(crate) fn family(&self) -> &'static str {
+        match self {
+            Self::Nerd(n) => n.family,
+            Self::Apple(a) => a.family,
+        }
+    }
+    pub(crate) fn name(&self) -> &'static str {
+        match self {
+            Self::Nerd(n) => n.family,
+            Self::Apple(a) => a.name,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FontRequest {
-    pub font: chickenwm_core::fonts::NerdFont,
+    pub font: FontItem,
     pub target: FontTarget,
 }
 

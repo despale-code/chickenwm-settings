@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 impl SettingsApp {
     pub(crate) fn page_fonts(&mut self, ui: &mut egui::Ui, kit: &Kit) {
-        use chickenwm_core::fonts::{self, FONT_TARGETS, NERD_FONTS};
+        use chickenwm_core::fonts::{self, APPLE_FONTS, FONT_TARGETS, NERD_FONTS};
         let ctx = ui.ctx().clone();
         let installed = self
             .installed_fonts
@@ -34,7 +34,7 @@ impl SettingsApp {
         let busy = self
             .font_job
             .as_ref()
-            .map(|j| j.lock().map(|j| j.request.font.family).unwrap_or(""));
+            .map(|j| j.lock().map(|j| j.request.font.family()).unwrap_or(""));
 
         let mut picked: Option<(FontTarget, String)> = None;
         let mut download: Option<FontRequest> = None;
@@ -46,6 +46,24 @@ impl SettingsApp {
                 .width(230.0)
                 .height(380.0)
                 .show_ui(ui, |ui| {
+                    let missing_apple: Vec<_> =
+                        APPLE_FONTS.iter().filter(|a| !is_installed(a.family)).collect();
+                    if !missing_apple.is_empty() {
+                        ui.label(
+                            RichText::new("Apple Fonts (click to download)")
+                                .size(11.0)
+                                .color(kit.sub),
+                        );
+                        for af in missing_apple {
+                            if filter.is_empty() || af.family.to_lowercase().contains(&filter) || af.name.to_lowercase().contains(&filter) {
+                                if ui.selectable_label(false, format!("⬇  {}", af.name)).clicked() {
+                                    download = Some(FontRequest { font: crate::FontItem::Apple(*af), target });
+                                }
+                            }
+                        }
+                        ui.separator();
+                    }
+
                     let missing: Vec<_> =
                         NERD_FONTS.iter().filter(|n| !is_installed(n.family)).collect();
                     if !missing.is_empty() {
@@ -57,7 +75,7 @@ impl SettingsApp {
                         for nf in missing {
                             if filter.is_empty() || nf.family.to_lowercase().contains(&filter) {
                                 if ui.selectable_label(false, format!("⬇  {}", nf.family)).clicked() {
-                                    download = Some(FontRequest { font: *nf, target });
+                                    download = Some(FontRequest { font: crate::FontItem::Nerd(*nf), target });
                                 }
                             }
                         }
@@ -98,6 +116,41 @@ impl SettingsApp {
             }
         });
 
+        kit::group(ui, kit, "Apple Fonts", |g| {
+            g.custom(|ui| {
+                ui.add(
+                    egui::Label::new(
+                        RichText::new("Apple's design typefaces (San Francisco and New York). Click to download and install for your user (no admin).")
+                            .size(12.0)
+                            .color(kit.sub),
+                    )
+                    .wrap(),
+                );
+                ui.add_space(8.0);
+                ui.horizontal_wrapped(|ui| {
+                    for af in APPLE_FONTS {
+                        if busy == Some(af.family) {
+                            ui.add(egui::Spinner::new().size(14.0));
+                            kit::chip(ui, kit, &format!("Installing {}…", af.name), kit.sub);
+                        } else if is_installed(af.family) {
+                            kit::chip(
+                                ui,
+                                kit,
+                                &format!("✓ {}", af.name),
+                                Color32::from_rgb(52, 199, 89),
+                            );
+                        } else if kit::button(ui, kit, &format!("⬇ {}", af.name), false).clicked()
+                        {
+                            download = Some(FontRequest {
+                                font: crate::FontItem::Apple(*af),
+                                target: FontTarget::InstallOnly,
+                            });
+                        }
+                    }
+                });
+            });
+        });
+
         kit::group(ui, kit, "Nerd Fonts", |g| {
             g.custom(|ui| {
                 ui.add(
@@ -124,7 +177,7 @@ impl SettingsApp {
                         } else if kit::button(ui, kit, &format!("⬇ {}", nf.family), false).clicked()
                         {
                             download = Some(FontRequest {
-                                font: *nf,
+                                font: crate::FontItem::Nerd(*nf),
                                 target: FontTarget::InstallOnly,
                             });
                         }
@@ -145,7 +198,7 @@ impl SettingsApp {
             egui::Modal::new(egui::Id::new("font-download-confirm")).show(&ctx, |ui| {
                 ui.set_width(380.0);
                 ui.label(
-                    RichText::new(format!("Download {}?", req.font.family))
+                    RichText::new(format!("Download {}?", req.font.name()))
                         .size(16.0)
                         .color(kit.fg),
                 );
@@ -164,7 +217,7 @@ impl SettingsApp {
                 ui.add(
                     egui::Label::new(
                         RichText::new(format!(
-                            "It's downloaded from the official Nerd Fonts release on GitHub and installed for your user only, in your local font folder. No administrator rights needed.{then}"
+                            "It's downloaded from GitHub and installed for your user only, in your local font folder. No administrator rights needed.{then}"
                         ))
                         .size(12.0)
                         .color(kit.sub),
@@ -225,11 +278,15 @@ impl SettingsApp {
             result: None,
         }));
         self.font_job = Some(Arc::clone(&job));
-        self.status_banner = format!("Downloading {}…", request.font.family);
+        let font_label = request.font.name().to_string();
+        self.status_banner = format!("Downloading {font_label}…");
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let result = chickenwm_core::fonts::install_nerd_font(&request.font)
-                .map_err(|e| format!("{e:#}"));
+            let result = match &request.font {
+                crate::FontItem::Nerd(nf) => chickenwm_core::fonts::install_nerd_font(nf),
+                crate::FontItem::Apple(af) => chickenwm_core::fonts::install_apple_font(af),
+            }
+            .map_err(|e| format!("{e:#}"));
             if let Ok(mut j) = job.lock() {
                 j.result = Some(result);
             }
@@ -247,16 +304,17 @@ impl SettingsApp {
             return;
         };
         self.font_job = None;
+        let font_family = request.font.family();
         match result {
             Ok(n) => {
                 self.installed_fonts = Some(chickenwm_core::fonts::installed_families(true));
-                self.status_banner = format!("Installed {} ({n} files)", request.font.family);
+                self.status_banner = format!("Installed {font_family} ({n} files)");
                 if request.target != FontTarget::InstallOnly {
-                    self.apply_font_choice(request.target, request.font.family);
+                    self.apply_font_choice(request.target, font_family);
                 }
             }
             Err(e) => {
-                self.status_banner = format!("Couldn't install {}: {e}", request.font.family)
+                self.status_banner = format!("Couldn't install {font_family}: {e}")
             }
         }
     }
