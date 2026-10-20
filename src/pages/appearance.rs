@@ -488,6 +488,64 @@ impl SettingsApp {
                     }
                 },
             );
+            if self.cfg.decoration.blur_enabled {
+                g.row(
+                    "Backdrop style",
+                    "Material effect applied by Desktop Window Manager.",
+                    |ui| {
+                        let styles = ["acrylic", "mica", "blur"];
+                        let labels = ["Acrylic", "Mica", "Standard Blur"];
+                        let mut cur = styles.iter().position(|&s| s == self.cfg.decoration.blur_style).unwrap_or(0);
+                        let opts: Vec<(usize, &str)> = labels.iter().enumerate().map(|(i, &l)| (i, l)).collect();
+                        if kit::segmented(ui, kit, &mut cur, &opts) {
+                            self.cfg.decoration.blur_style = styles[cur].to_string();
+                            self.doc.set_category_key(
+                                "decoration",
+                                "blur_style",
+                                &self.cfg.decoration.blur_style,
+                            );
+                            changed = true;
+                        }
+                    },
+                );
+                g.row(
+                    "Blur strength",
+                    "Radius / intensity of the backdrop blur effect in pixels.",
+                    |ui| {
+                        if ui
+                            .add(
+                                egui::Slider::new(&mut self.cfg.decoration.blur_size, 1..=30)
+                                    .suffix(" px"),
+                            )
+                            .changed()
+                        {
+                            self.doc.set_category_key(
+                                "decoration",
+                                "blur_size",
+                                &self.cfg.decoration.blur_size.to_string(),
+                            );
+                            changed = true;
+                        }
+                    },
+                );
+                g.row(
+                    "Blur passes",
+                    "Number of blur filter passes (higher is smoother, lower is lighter).",
+                    |ui| {
+                        if ui
+                            .add(egui::Slider::new(&mut self.cfg.decoration.blur_passes, 1..=5))
+                            .changed()
+                        {
+                            self.doc.set_category_key(
+                                "decoration",
+                                "blur_passes",
+                                &self.cfg.decoration.blur_passes.to_string(),
+                            );
+                            changed = true;
+                        }
+                    },
+                );
+            }
         });
         if border_changed {
             let spec = self.cfg.general.col_active_border.to_hypr_string();
