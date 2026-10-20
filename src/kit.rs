@@ -343,8 +343,15 @@ pub fn button(ui: &mut egui::Ui, kit: &Kit, label: &str, primary: bool) -> Respo
     )
 }
 
-/// Sidebar entry: colored icon tile + label; the selected one is filled with the accent.
-pub fn sidebar_item(ui: &mut egui::Ui, kit: &Kit, glyph: &str, tile: Color32, label: &str, selected: bool) -> bool {
+/// Sidebar entry: colored icon tile with crisp monotone vector icon + label; the selected one is filled with the accent.
+pub fn sidebar_item(
+    ui: &mut egui::Ui,
+    kit: &Kit,
+    paint_icon: fn(&egui::Painter, Rect, Color32),
+    tile: Color32,
+    label: &str,
+    selected: bool,
+) -> bool {
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), Sense::click());
     let painter = ui.painter();
     if selected {
@@ -354,7 +361,7 @@ pub fn sidebar_item(ui: &mut egui::Ui, kit: &Kit, glyph: &str, tile: Color32, la
     }
     let icon = Rect::from_center_size(egui::pos2(rect.left() + 20.0, rect.center().y), Vec2::splat(22.0));
     painter.rect_filled(icon, CornerRadius::same(6), tile);
-    painter.text(icon.center(), egui::Align2::CENTER_CENTER, glyph, FontId::proportional(13.0), Color32::WHITE);
+    paint_icon(painter, icon, Color32::WHITE);
     painter.text(
         egui::pos2(icon.right() + 10.0, rect.center().y),
         egui::Align2::LEFT_CENTER,
@@ -373,7 +380,8 @@ pub fn search_field(ui: &mut egui::Ui, kit: &Kit, text: &mut String, hint: &str)
         .inner_margin(egui::Margin::symmetric(8, 5))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("🔍").size(12.0).color(kit.sub));
+                let (ic_r, _) = ui.allocate_exact_size(Vec2::splat(14.0), Sense::hover());
+                chickenwm_core::ui_icons::paint_search(ui.painter(), ic_r, kit.sub);
                 ui.add(
                     egui::TextEdit::singleline(text)
                         .hint_text(RichText::new(hint).color(kit.sub))

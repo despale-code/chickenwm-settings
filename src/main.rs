@@ -52,7 +52,7 @@ pub(crate) enum Page {
 
 pub(crate) struct PageInfo {
     pub page: Page,
-    pub glyph: &'static str,
+    pub paint_icon: fn(&egui::Painter, egui::Rect, egui::Color32),
     pub tile: Color32,
     pub title: &'static str,
     pub subtitle: &'static str,
@@ -63,7 +63,7 @@ pub(crate) struct PageInfo {
 pub(crate) const PAGES: [PageInfo; 10] = [
     PageInfo {
         page: Page::General,
-        glyph: "⚙",
+        paint_icon: chickenwm_core::ui_icons::paint_gear,
         tile: Color32::from_rgb(142, 142, 147),
         title: "General",
         subtitle: "Shell, default file manager and startup apps.",
@@ -71,7 +71,7 @@ pub(crate) const PAGES: [PageInfo; 10] = [
     },
     PageInfo {
         page: Page::Appearance,
-        glyph: "🎨",
+        paint_icon: chickenwm_core::ui_icons::paint_palette,
         tile: Color32::from_rgb(88, 86, 214),
         title: "Appearance",
         subtitle: "Theme, light and dark, accent color, icons and window looks.",
@@ -79,7 +79,7 @@ pub(crate) const PAGES: [PageInfo; 10] = [
     },
     PageInfo {
         page: Page::Wallpaper,
-        glyph: "🖼",
+        paint_icon: chickenwm_core::ui_icons::paint_wallpaper,
         tile: Color32::from_rgb(52, 170, 220),
         title: "Wallpaper",
         subtitle: "The desktop background and its layers.",
@@ -87,7 +87,7 @@ pub(crate) const PAGES: [PageInfo; 10] = [
     },
     PageInfo {
         page: Page::Fonts,
-        glyph: "A",
+        paint_icon: chickenwm_core::ui_icons::paint_fonts,
         tile: Color32::from_rgb(175, 82, 222),
         title: "Fonts",
         subtitle: "Typefaces for the bar, launcher, apps and browser, and Nerd Font downloads.",
@@ -95,7 +95,7 @@ pub(crate) const PAGES: [PageInfo; 10] = [
     },
     PageInfo {
         page: Page::Displays,
-        glyph: "🖥",
+        paint_icon: chickenwm_core::ui_icons::paint_displays,
         tile: Color32::from_rgb(0, 122, 255),
         title: "Displays",
         subtitle: "Monitors, frame rate and the compositor.",
@@ -103,7 +103,7 @@ pub(crate) const PAGES: [PageInfo; 10] = [
     },
     PageInfo {
         page: Page::Tiling,
-        glyph: "◫",
+        paint_icon: chickenwm_core::ui_icons::paint_tiling,
         tile: Color32::from_rgb(52, 199, 89),
         title: "Tiling",
         subtitle: "How windows are arranged.",
@@ -111,7 +111,7 @@ pub(crate) const PAGES: [PageInfo; 10] = [
     },
     PageInfo {
         page: Page::Animations,
-        glyph: "✨",
+        paint_icon: chickenwm_core::ui_icons::paint_animations,
         tile: Color32::from_rgb(255, 149, 0),
         title: "Animations",
         subtitle: "Easing curves and animation speeds.",
@@ -119,7 +119,7 @@ pub(crate) const PAGES: [PageInfo; 10] = [
     },
     PageInfo {
         page: Page::Keyboard,
-        glyph: "⌨",
+        paint_icon: chickenwm_core::ui_icons::paint_keyboard,
         tile: Color32::from_rgb(99, 99, 102),
         title: "Keyboard",
         subtitle: "Keyboard shortcuts.",
@@ -127,7 +127,7 @@ pub(crate) const PAGES: [PageInfo; 10] = [
     },
     PageInfo {
         page: Page::WindowRules,
-        glyph: "▣",
+        paint_icon: chickenwm_core::ui_icons::paint_window_rules,
         tile: Color32::from_rgb(255, 59, 48),
         title: "Window Rules",
         subtitle: "Per-app rules: float, workspace, opacity, process, initialTitle and more.",
@@ -135,7 +135,7 @@ pub(crate) const PAGES: [PageInfo; 10] = [
     },
     PageInfo {
         page: Page::Logs,
-        glyph: "☰",
+        paint_icon: chickenwm_core::ui_icons::paint_logs,
         tile: Color32::from_rgb(120, 120, 128),
         title: "Logs",
         subtitle: "What each module wrote, and crashes.",
@@ -617,7 +617,7 @@ impl SettingsApp {
                 continue;
             }
             shown += 1;
-            if kit::sidebar_item(ui, kit, p.glyph, p.tile, p.title, self.page == p.page) {
+            if kit::sidebar_item(ui, kit, p.paint_icon, p.tile, p.title, self.page == p.page) {
                 self.page = p.page;
             }
             ui.add_space(2.0);
