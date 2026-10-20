@@ -818,10 +818,13 @@ impl eframe::App for SettingsApp {
             .frame(
                 egui::Frame::NONE
                     .fill(kit.sidebar)
-                    .inner_margin(egui::Margin::symmetric(10, 6))
-                    .stroke(Stroke::new(1.0_f32, kit.border)),
+                    .inner_margin(egui::Margin::symmetric(10, 6)),
             )
-            .show(ctx, |ui| self.sidebar(ui, &kit));
+            .show(ctx, |ui| {
+                self.sidebar(ui, &kit);
+                let rect = ui.max_rect();
+                ui.painter().vline(rect.right(), rect.y_range(), Stroke::new(1.0_f32, kit.border));
+            });
 
         // Ctrl+Z (when no text field has the keyboard): undo the last saved change.
         if !ctx.wants_keyboard_input()

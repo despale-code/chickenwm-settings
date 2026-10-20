@@ -38,20 +38,28 @@ impl ThemeEditor {
 
         kit::group(ui, kit, "Theme", |g| {
             g.custom(|ui| {
+                let avail_w = ui.available_width() - 12.0; // leave room for scrollbar
+                let spacing = 12.0;
+                let tile_w = ((avail_w - spacing * 2.0) / 3.0).floor().max(140.0);
+                let tile_h = (tile_w * 0.68).round().max(105.0);
+                let grid_h = tile_h * 3.0 + spacing * 2.0 + 8.0;
+
                 egui::ScrollArea::vertical()
-                    .max_height(260.0)
+                    .min_scrolled_height(grid_h)
+                    .max_height(grid_h)
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         egui::Grid::new("theme_presets_grid")
                             .num_columns(3)
-                            .spacing(Vec2::new(14.0, 14.0))
+                            .spacing(Vec2::new(spacing, spacing))
                             .show(ui, |ui| {
                                 let mode = self.draft.mode;
                                 let mut col = 0;
                                 let mut chosen = None;
+                                let tile_size = Vec2::new(tile_w, tile_h);
 
                                 let generated = Palette::new(self.draft.accent, mode);
-                                if theme_tile(ui, kit, "ChickenWM", &generated, self.draft.preset.is_empty()) {
+                                if theme_tile(ui, kit, "ChickenWM", &generated, self.draft.preset.is_empty(), tile_size) {
                                     chosen = Some(String::new());
                                 }
                                 col += 1;
@@ -65,7 +73,7 @@ impl ThemeEditor {
                                         ThemeMode::Dark => p.dark_name,
                                     };
                                     let label = if name == p.name { p.name.to_string() } else { format!("{} · {name}", p.name) };
-                                    if theme_tile(ui, kit, &label, &p.palette(mode), self.draft.preset == p.id) {
+                                    if theme_tile(ui, kit, &label, &p.palette(mode), self.draft.preset == p.id, tile_size) {
                                         chosen = Some(p.id.to_string());
                                     }
                                     col += 1;
@@ -158,44 +166,52 @@ fn icon_theme_label(t: &str) -> String {
 }
 
 /// One gallery tile: a tiny window mock-up in the theme's colors. Returns `true` when clicked.
-fn theme_tile(ui: &mut egui::Ui, kit: &Kit, name: &str, p: &Palette, selected: bool) -> bool {
-    let size = Vec2::new(132.0, 106.0);
+fn theme_tile(ui: &mut egui::Ui, kit: &Kit, name: &str, p: &Palette, selected: bool, size: Vec2) -> bool {
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     let painter = ui.painter();
-    let preview = Rect::from_min_size(rect.min, Vec2::new(size.x, 78.0));
+    let preview_h = (size.y - 24.0).max(40.0);
+    let preview = Rect::from_min_size(rect.min, Vec2::new(size.x, preview_h));
     let t = ui.ctx().animate_bool_with_time(resp.id, selected || resp.hovered(), 0.12);
     // Selection ring.
     if selected {
-        painter.rect_stroke(preview.expand(3.0), CornerRadius::same(11), Stroke::new(2.5_f32, kit.accent), egui::StrokeKind::Inside);
+        painter.rect_stroke(preview.expand(3.0), CornerRadius::same(10), Stroke::new(2.5_f32, kit.accent), egui::StrokeKind::Inside);
     } else if t > 0.0 {
-        painter.rect_stroke(preview.expand(3.0), CornerRadius::same(11), Stroke::new(2.0_f32, kit.border.gamma_multiply(t * 2.0)), egui::StrokeKind::Inside);
+        painter.rect_stroke(preview.expand(3.0), CornerRadius::same(10), Stroke::new(2.0_f32, kit.border.gamma_multiply(t * 2.0)), egui::StrokeKind::Inside);
     }
     let win = preview.shrink(if selected { 4.0 } else { 1.0 });
-    painter.rect(win, CornerRadius::same(8), c32(p.base), Stroke::new(1.0_f32, kit.border), egui::StrokeKind::Inside);
+    painter.rect(win, CornerRadius::same(7), c32(p.base), Stroke::new(1.0_f32, kit.border), egui::StrokeKind::Inside);
     // Sidebar strip with a selected item.
-    let side = Rect::from_min_max(win.min, egui::pos2(win.left() + win.width() * 0.3, win.bottom()));
-    painter.rect_filled(side, CornerRadius { nw: 8, sw: 8, ne: 0, se: 0 }, c32(p.mantle));
-    for i in 0..3 {
-        let y = side.top() + 12.0 + i as f32 * 12.0;
-        let line = Rect::from_min_size(egui::pos2(side.left() + 6.0, y), Vec2::new(side.width() - 12.0, 6.0));
+    let side_w = (win.width() * 0.32).clamp(32.0, 60.0);
+    let side = Rect::from_min_max(win.min, egui::pos2(win.left() + side_w, win.bottom()));
+    painter.rect_filled(side, CornerRadius { nw: 7, sw: 7, ne: 0, se: 0 }, c32(p.mantle));
+    // Border-right on preview sidebar:
+    painter.vline(side.right(), side.y_range(), Stroke::new(1.0_f32, c32(p.border)));
+
+    let line_count = 3;
+    let line_spacing = ((side.height() - 20.0) / line_count as f32).clamp(8.0, 16.0);
+    for i in 0..line_count {
+        let y = side.top() + 10.0 + i as f32 * line_spacing;
+        let line = Rect::from_min_size(egui::pos2(side.left() + 5.0, y), Vec2::new((side.width() - 10.0).max(4.0), 5.0));
         let fill = if i == 1 { c32(p.accent) } else { c32(p.fg).gamma_multiply(0.25) };
-        painter.rect_filled(line, CornerRadius::same(3), fill);
+        painter.rect_filled(line, CornerRadius::same(2), fill);
     }
     // Content card.
-    let card = Rect::from_min_max(egui::pos2(side.right() + 7.0, win.top() + 8.0), egui::pos2(win.right() - 7.0, win.bottom() - 8.0));
+    let card = Rect::from_min_max(egui::pos2(side.right() + 6.0, win.top() + 7.0), egui::pos2(win.right() - 6.0, win.bottom() - 7.0));
     painter.rect(card, CornerRadius::same(5), c32(p.surface), Stroke::new(1.0_f32, c32(p.border)), egui::StrokeKind::Inside);
-    let text = Rect::from_min_size(card.min + Vec2::new(6.0, 7.0), Vec2::new(card.width() * 0.6, 5.0));
-    painter.rect_filled(text, CornerRadius::same(3), c32(p.fg).gamma_multiply(0.85));
-    painter.rect_filled(text.translate(Vec2::new(0.0, 9.0)).scale_from_center2(Vec2::new(0.75, 1.0)), CornerRadius::same(3), c32(p.subtext).gamma_multiply(0.7));
+    let text = Rect::from_min_size(card.min + Vec2::new(6.0, 6.0), Vec2::new((card.width() * 0.6).max(10.0), 5.0));
+    painter.rect_filled(text, CornerRadius::same(2), c32(p.fg).gamma_multiply(0.85));
+    painter.rect_filled(text.translate(Vec2::new(0.0, 8.0)).scale_from_center2(Vec2::new(0.75, 1.0)), CornerRadius::same(2), c32(p.subtext).gamma_multiply(0.7));
     // Highlight dots.
-    for (i, c) in [p.dir, p.exec, p.archive, p.media, p.danger].into_iter().enumerate() {
-        painter.circle_filled(egui::pos2(card.left() + 9.0 + i as f32 * 11.0, card.bottom() - 9.0), 3.5, c32(c));
+    let dots = [p.dir, p.exec, p.archive, p.media, p.danger];
+    let dot_spacing = ((card.width() - 36.0) / dots.len() as f32).clamp(8.0, 14.0);
+    for (i, c) in dots.into_iter().enumerate() {
+        painter.circle_filled(egui::pos2(card.left() + 8.0 + i as f32 * dot_spacing, card.bottom() - 8.0), 3.0, c32(c));
     }
     // Accent button.
-    let btn = Rect::from_min_size(egui::pos2(card.right() - 26.0, card.bottom() - 15.0), Vec2::new(20.0, 10.0));
-    painter.rect_filled(btn, CornerRadius::same(5), c32(p.accent));
+    let btn = Rect::from_min_size(egui::pos2(card.right() - 24.0, card.bottom() - 14.0), Vec2::new(18.0, 9.0));
+    painter.rect_filled(btn, CornerRadius::same(4), c32(p.accent));
     painter.text(
-        egui::pos2(rect.center().x, preview.bottom() + 15.0),
+        egui::pos2(rect.center().x, preview.bottom() + 13.0),
         egui::Align2::CENTER_CENTER,
         name,
         FontId::proportional(12.0),
