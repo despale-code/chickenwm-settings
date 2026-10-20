@@ -5,7 +5,8 @@
 
 use crate::kit::{self, c32, Kit};
 use chickenwm_core::config::RgbaColor;
-use chickenwm_core::icon_theme::{available_themes, icons_root, IconTheme, CATEGORIES, SPECIAL_FOLDERS};
+use chickenwm_core::icon_theme::{available_themes, icons_root, IconRequest, IconTheme, CATEGORIES};
+use std::path::PathBuf;
 use chickenwm_core::theme::{css, AppMode, Palette, ThemeConfig, ThemeMode, DEFAULT_ACCENT};
 use chickenwm_core::theme_presets::PRESETS;
 use eframe::egui::{self, CornerRadius, FontId, Rect, Sense, Stroke, Vec2};
@@ -123,15 +124,30 @@ impl ThemeEditor {
             }
             g.row("Icons", "Icons in the file explorer and launcher.", |ui| {
                 let before = self.draft.icon_theme.clone();
-                egui::ComboBox::from_id_salt("icon_theme")
-                    .selected_text(icon_theme_label(&self.draft.icon_theme))
-                    .width(190.0)
-                    .show_ui(ui, |ui| {
-                        for t in self.icon_themes.clone() {
-                            let label = icon_theme_label(&t);
-                            ui.selectable_value(&mut self.draft.icon_theme, t, label);
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_id_salt("icon_theme")
+                        .selected_text(icon_theme_label(&self.draft.icon_theme))
+                        .width(170.0)
+                        .show_ui(ui, |ui| {
+                            for t in self.icon_themes.clone() {
+                                let label = icon_theme_label(&t);
+                                ui.selectable_value(&mut self.draft.icon_theme, t, label);
+                            }
+                        });
+                    if ui.button("Import…").on_hover_text("Import a Linux icon theme from a folder or .zip / .tar.gz archive").clicked() {
+                        if let Some(path) = pick_theme_archive() {
+                            if let Ok(imported_name) = chickenwm_core::icon_theme::import_theme_from_path(&path) {
+                                self.draft.icon_theme = imported_name;
+                                self.icon_themes = available_themes();
+                                self.icons = None;
+                                apply = true;
+                            }
                         }
-                    });
+                    }
+                    if ui.button("Folder").on_hover_text("Open ~/.config/chickenwm/icons in File Explorer").clicked() {
+                        let _ = std::process::Command::new("explorer").arg(icons_root()).spawn();
+                    }
+                });
                 if self.draft.icon_theme != before {
                     apply = true;
                 }
@@ -161,7 +177,32 @@ fn icon_theme_label(t: &str) -> String {
     match t {
         "system" => "Windows icons".to_string(),
         "chickenwm" => "ChickenWM (follows theme)".to_string(),
+        "lucide" => "Lucide (macOS Finder style)".to_string(),
+        "font-awesome" => "Font Awesome (Universal)".to_string(),
+        "papirus" => "Papirus (Linux icon theme)".to_string(),
         _ => t.to_string(),
+    }
+}
+
+fn pick_theme_archive() -> Option<PathBuf> {
+    let script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+$d = New-Object System.Windows.Forms.OpenFileDialog
+$d.Title = "Select Icon Theme Archive (.zip, .tar.gz, .tgz, .tar) or Folder"
+$d.Filter = "Icon Theme Archives (*.zip;*.tar.gz;*.tgz;*.tar)|*.zip;*.tar.gz;*.tgz;*.tar|All Files (*.*)|*.*"
+if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output $d.FileName
+}
+"#;
+    let out = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", script])
+        .output()
+        .ok()?;
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if s.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(s))
     }
 }
 
@@ -243,22 +284,30 @@ fn load_icon_previews(ctx: &egui::Context, theme: &str) -> Vec<(String, egui::Te
     if t.is_system() {
         return Vec::new();
     }
-    let dir = icons_root().join(theme);
-    let mut names: Vec<String> = vec!["folder".into()];
-    names.extend(SPECIAL_FOLDERS.iter().map(|s| format!("folder-{s}")));
-    names.push("drive".into());
-    names.extend(CATEGORIES.iter().map(|s| s.to_string()));
-    names
+    let mut requests: Vec<(&str, IconRequest)> = vec![
+        ("folder", IconRequest::Folder),
+        ("home", IconRequest::SpecialFolder("home".into())),
+        ("downloads", IconRequest::SpecialFolder("downloads".into())),
+        ("documents", IconRequest::SpecialFolder("documents".into())),
+        ("pictures", IconRequest::SpecialFolder("pictures".into())),
+        ("music", IconRequest::SpecialFolder("music".into())),
+        ("videos", IconRequest::SpecialFolder("videos".into())),
+        ("drive", IconRequest::Drive),
+    ];
+    for cat in CATEGORIES {
+        requests.push((cat, IconRequest::File(cat.to_string())));
+    }
+    requests
         .into_iter()
-        .filter_map(|n| {
-            let img = image::open(dir.join(format!("{n}.png"))).ok()?.to_rgba8();
-            let size = [img.width() as usize, img.height() as usize];
+        .filter_map(|(label, req)| {
+            let path = t.resolve(&req)?;
+            let (w, h, rgba) = chickenwm_core::icon_theme::load_icon_image(&path, 32)?;
             let tex = ctx.load_texture(
-                format!("theme-icon-{theme}-{n}"),
-                egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw()),
+                format!("theme-icon-{theme}-{label}"),
+                egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba),
                 egui::TextureOptions::LINEAR,
             );
-            Some((n, tex))
+            Some((label.to_string(), tex))
         })
         .collect()
 }
