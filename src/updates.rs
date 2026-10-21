@@ -8,7 +8,7 @@ use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 
-const UPDATE_SCRIPT: &str = "https://despale-code.github.io/chickenwm/update.ps1";
+const UPDATE_SCRIPT: &str = "https://raw.githubusercontent.com/despale-code/chickenwm/main/docs/update.ps1";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 
