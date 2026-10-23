@@ -100,7 +100,29 @@ impl SettingsApp {
                 });
             });
         });
+        let mut speed_changed = false;
         kit::group(ui, kit, "Animations", |g| {
+            g.row(
+                "Animation speed",
+                "Master speed multiplier for window spring animations",
+                |ui| {
+                    if ui
+                        .add(
+                            egui::Slider::new(&mut self.cfg.animations.speed, 0.5..=4.0)
+                                .suffix("x")
+                                .max_decimals(1),
+                        )
+                        .changed()
+                    {
+                        self.doc.set_category_key(
+                            "animations",
+                            "speed",
+                            &format!("{:.1}", self.cfg.animations.speed),
+                        );
+                        speed_changed = true;
+                    }
+                },
+            );
             for rule in &self.cfg.animation_rules {
                 g.row(&rule.name, "", |ui| {
                     ui.label(
@@ -130,6 +152,9 @@ impl SettingsApp {
                 .collect();
             self.doc.replace_directives("bezier", &lines);
             self.sync_config_and_notify_labeled("Bezier curve");
+        }
+        if speed_changed {
+            self.sync_config_and_notify_labeled("Animation speed");
         }
     }
 }
