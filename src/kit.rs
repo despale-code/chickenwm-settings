@@ -218,10 +218,11 @@ impl Group<'_> {
                 self.ui.ctx().request_repaint();
             }
         }
+        let avail_w = self.ui.available_width().max(1.0);
         self.ui
-            .allocate_ui_with_layout(Vec2::new(self.ui.available_width(), min_h), Layout::left_to_right(Align::Center), |ui| {
+            .allocate_ui_with_layout(Vec2::new(avail_w, min_h), Layout::left_to_right(Align::Center), |ui| {
                 ui.set_min_height(min_h);
-                let text_w = (ui.available_width() * 0.50).max(150.0);
+                let text_w = (ui.available_width() * 0.50).clamp(40.0, ui.available_width().max(40.0));
                 ui.allocate_ui_with_layout(Vec2::new(text_w, min_h), Layout::top_down(Align::Min), |ui| {
                     ui.add_space(if hint.is_empty() { (min_h - 18.0) / 2.0 } else { 9.0 });
                     ui.label(RichText::new(label).size(14.0).color(kit.fg));

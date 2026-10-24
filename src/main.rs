@@ -843,7 +843,7 @@ impl eframe::App for SettingsApp {
 
         egui::SidePanel::left("settings_sidebar")
             .resizable(false)
-            .exact_width(236.0)
+            .exact_width((ctx.screen_rect().width() * 0.30).clamp(110.0, 236.0))
             .frame(
                 egui::Frame::NONE
                     .fill(Color32::from_rgba_unmultiplied(kit.sidebar.r(), kit.sidebar.g(), kit.sidebar.b(), 26))
@@ -886,8 +886,8 @@ impl eframe::App for SettingsApp {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         let width = ui.available_width();
-                        let column = width.min(700.0) - 48.0;
-                        let side = ((width - column) / 2.0).max(24.0);
+                        let column = (width.min(700.0) - 48.0).max(width.min(180.0)).max(1.0);
+                        let side = ((width - column) / 2.0).max(0.0);
                         ui.horizontal(|ui| {
                             ui.add_space(side);
                             ui.vertical(|ui| {
@@ -909,7 +909,7 @@ impl eframe::App for SettingsApp {
         // Top right window controls (Minimize, Maximize, Close)
         egui::Area::new(egui::Id::new("settings_win_controls"))
             .order(egui::Order::Foreground)
-            .fixed_pos(egui::pos2(screen.right() - 88.0, screen.top() + 8.0))
+            .fixed_pos(egui::pos2((screen.right() - 88.0).max(screen.left() + 4.0), screen.top() + 8.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
@@ -958,7 +958,7 @@ impl eframe::App for SettingsApp {
             .order(egui::Order::Background)
             .fixed_pos(egui::pos2(screen.left(), screen.top()))
             .show(ctx, |ui| {
-                let drag_rect = egui::Rect::from_min_max(egui::pos2(screen.left(), screen.top()), egui::pos2(screen.right() - 92.0, screen.top() + 32.0));
+                let drag_rect = egui::Rect::from_min_max(egui::pos2(screen.left(), screen.top()), egui::pos2((screen.right() - 92.0).max(screen.left() + 4.0), screen.top() + 32.0));
                 let drag_resp = ui.interact(drag_rect, egui::Id::new("settings_top_drag"), egui::Sense::drag());
                 if drag_resp.drag_started() {
                     ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
@@ -1102,6 +1102,21 @@ mod tests {
             .expect("headless screenshot render should succeed");
         let meta = std::fs::metadata(&out_path).expect("screenshot file written");
         assert!(meta.len() > 1000);
+        for &[w, h] in &[[120.0_f32, 90.0], [220.0, 150.0], [280.0, 200.0]] {
+            let doc2 = ConfigDocument::parse(DEFAULT_CHICKENWM_CONF).unwrap();
+            let cfg2 = doc2.compile();
+            let css2 = Arc::new(RwLock::new(CssStyleSheet::default()));
+            let out2 = std::env::temp_dir().join(format!("chickenwm_settings_shrunk_{w}x{h}.png"));
+            let req2 = chickenwm_core::headless::RenderRequest {
+                out: out2.clone(),
+                size: egui::vec2(w, h),
+                pixels_per_point: 1.0,
+                frames: 2,
+            };
+            chickenwm_core::headless::render_app(&req2, |_cc| SettingsApp::new(doc2, cfg2, css2))
+                .expect("shrunk settings window must never panic");
+            let _ = std::fs::remove_file(&out2);
+        }
         let _ = std::fs::remove_file(&out_path);
     }
 }
